@@ -1,0 +1,120 @@
+using System.Windows.Threading;
+using Microsoft.Win32;
+using Forms = System.Windows.Forms;
+
+namespace PrivacyScreen;
+
+internal sealed class PrivacyOverlayManager : IDisposable
+{
+    private readonly Dispatcher _dispatcher;
+    private readonly List<PrivacyOverlayWindow> _windows = new();
+    private readonly DispatcherTimer _refresh;
+    private PrivacyInputBlocker? _blocker;
+    private PrivacyCursor? _cursor;
+    private PrivacyCursorGuard? _cursorGuard;
+    internal bool IsEnabled { get; private set; }
+    internal event Action<string?>? Changed;
+
+    internal PrivacyOverlayManager(Dispatcher dispatcher)
+    {
+        _dispatcher = dispatcher;
+        _refresh = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background,
+            (_, _) => Refresh(), dispatcher);
+        _refresh.Stop();
+        SystemEvents.DisplaySettingsChanged += DisplayChanged;
+        SystemEvents.SessionSwitch += SessionChanged;
+    }
+
+    internal void Enable()
+    {
+        _dispatcher.VerifyAccess();
+        if (IsEnabled) return;
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+            throw new NotSupportedException("Privacy mode requires Windows 10 version 2004 or newer.");
+        try
+        {
+            CreateOverlays();
+            _cursorGuard = new PrivacyCursorGuard();
+            _cursor = new PrivacyCursor();
+            _blocker = new PrivacyInputBlocker(() => _dispatcher.BeginInvoke(() => Disable()));
+            IsEnabled = true;
+            _refresh.Start();
+        }
+        catch
+        {
+            // Constructor failure may leave a partially replaced cursor scheme.
+            _cursorGuard?.RequestRestore();
+            Disable();
+            throw;
+        }
+        Changed?.Invoke(null);
+    }
+
+    internal void Disable(string? error = null)
+    {
+        _dispatcher.VerifyAccess();
+        bool wasEnabled = IsEnabled;
+        IsEnabled = false;
+        _refresh.Stop();
+        try { _cursor?.Dispose(); }
+        catch (Exception ex)
+        {
+            error ??= ex.Message;
+            _cursorGuard?.RequestRestore();
+        }
+        _cursor = null;
+        try { _cursorGuard?.Dispose(); }
+        catch (Exception ex) { error ??= ex.Message; }
+        _cursorGuard = null;
+        _blocker?.Dispose();
+        _blocker = null;
+        foreach (var window in _windows) window.Dispose();
+        _windows.Clear();
+        if (wasEnabled) Changed?.Invoke(error);
+    }
+
+    private void CreateOverlays()
+    {
+        foreach (var monitor in Forms.Screen.AllScreens)
+        {
+            var window = new PrivacyOverlayWindow(monitor.Bounds);
+            _windows.Add(window); // includes partially created windows if Show fails
+            window.ShowCovered(monitor.Bounds);
+        }
+        if (_windows.Count == 0) throw new InvalidOperationException("No monitors are available.");
+    }
+
+    private void Refresh()
+    {
+        if (!IsEnabled) return;
+        try
+        {
+            if (_cursorGuard?.IsAlive != true)
+                throw new InvalidOperationException("Cursor restoration helper stopped.");
+            var screens = Forms.Screen.AllScreens;
+            if (screens.Length != _windows.Count)
+            {
+                // Recreate on hot-plug; retain hooks and privacy state.
+                foreach (var window in _windows) window.Dispose();
+                _windows.Clear();
+                CreateOverlays();
+            }
+            else for (int i = 0; i < screens.Length; i++) _windows[i].Cover(screens[i].Bounds);
+        }
+        catch (Exception ex) { Disable("Privacy screen closed: " + ex.Message); }
+    }
+
+    private void DisplayChanged(object? sender, EventArgs e) => _dispatcher.BeginInvoke(Refresh);
+    private void SessionChanged(object sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason is SessionSwitchReason.SessionLock or SessionSwitchReason.SessionLogoff)
+            _dispatcher.BeginInvoke(() => Disable());
+    }
+
+    public void Dispose()
+    {
+        SystemEvents.DisplaySettingsChanged -= DisplayChanged;
+        SystemEvents.SessionSwitch -= SessionChanged;
+        Disable();
+    }
+}
