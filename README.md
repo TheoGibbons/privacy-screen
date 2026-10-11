@@ -20,6 +20,8 @@ With the .NET 10 SDK installed on Windows:
 
 The only published file is `dist\PrivacyScreen.exe`. The privacy overlay, input policy, input hooks, and cursor restoration implementation were adapted from `remote-desktop\windows\RemoteDesktopWin`.
 
+The executable includes a monitor-and-lock icon for Windows Explorer and shortcuts. To regenerate the icon, run `./tools/generate-icon.ps1`, then rebuild with `./build.ps1`.
+
 ## Verify
 
 ```powershell
