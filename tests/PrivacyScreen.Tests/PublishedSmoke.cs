@@ -49,6 +49,15 @@ internal static partial class Program
             }
             Check(windows.Count == Forms.Screen.AllScreens.Length, "published single file covers every monitor");
             Check(SnapshotCursor().All(pixel => pixel == Color.Magenta.ToArgb()), "published app blanks cursors");
+            Check(PrivacyCursor.Restore(), "reload the scheme while the published app stays active");
+            bool repaired = false;
+            for (int i = 0; i < 40 && !repaired; i++)
+            {
+                Thread.Sleep(100);
+                Check(!host.HasExited, "cursor recovery keeps the published app active");
+                repaired = SnapshotCursor().All(pixel => pixel == Color.Magenta.ToArgb());
+            }
+            Check(repaired, "published app automatically hides cursors again after a silent scheme reload");
             var bounds = Forms.Screen.PrimaryScreen!.Bounds;
             using (var capture = new Bitmap(32, 32))
             {
@@ -90,6 +99,7 @@ internal static partial class Program
                 if (!unlockedHost.HasExited) { unlockedHost.Kill(); unlockedHost.WaitForExit(5000); }
             }
             Console.WriteLine("PASS: published single-file launch, duplicate rejection, overlay cleanup and bundled crash restoration");
+            Console.WriteLine("PASS: published app automatically repairs a cursor scheme reload without restarting privacy");
             Console.WriteLine("PASS: published screen is captured and Remote Desktop Unicode typing unlocks it");
         }
         finally

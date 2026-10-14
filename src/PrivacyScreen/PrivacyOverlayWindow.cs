@@ -17,7 +17,6 @@ internal sealed class PrivacyOverlayWindow : Forms.Form
         ShowInTaskbar = false;
         BackColor = Color.Black;
         Bounds = bounds;
-        TopMost = true;
         Controls.Add(new Forms.Label
         {
             Text = "type unlock",
@@ -30,6 +29,18 @@ internal sealed class PrivacyOverlayWindow : Forms.Form
     }
 
     protected override bool ShowWithoutActivation => true;
+    protected override void WndProc(ref Forms.Message message)
+    {
+        // Hover activation and child controls can ask to activate the form even
+        // with WS_EX_NOACTIVATE. Keep input focus on the underlying application.
+        if (message.Msg == 0x0021) // WM_MOUSEACTIVATE
+        {
+            message.Result = new IntPtr(3); // MA_NOACTIVATE
+            return;
+        }
+        base.WndProc(ref message);
+    }
+
     protected override Forms.CreateParams CreateParams
     {
         get
@@ -44,6 +55,8 @@ internal sealed class PrivacyOverlayWindow : Forms.Form
 
     internal void ShowCovered(Rectangle bounds)
     {
+        // WinForms focuses a TopMost form even with ShowWithoutActivation.
+        // Cover sets native topmost order with NOACTIVATE instead.
         Show();
         Cover(bounds);
     }

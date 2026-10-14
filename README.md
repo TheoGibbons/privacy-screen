@@ -6,7 +6,7 @@ Type **unlock** locally or through a remote desktop connection to restore the de
 
 The executable is self-contained for Windows x64: copy just `PrivacyScreen.exe` to another PC; no .NET installation is needed. It requires Windows 10 version 2004 or newer, or Windows 11. A second launch exits silently if privacy is already running.
 
-The app adapts to monitor changes and exits when Windows locks or logs off. A hidden helper process, launched from the same executable, restores the cursor scheme if the main process crashes. No networking, remote desktop setup, installation, or startup registration is involved.
+The app adapts to monitor changes and exits when Windows locks or logs off. It reapplies hidden cursors when Windows settings change and once a second to recover from silent cursor scheme reloads. A hidden helper process, launched from the same executable, restores the cursor scheme if the main process crashes. No networking, remote desktop setup, installation, or startup registration is involved.
 
 The black screen and caption are included in desktop capture, so remote desktop viewers see the privacy screen until they type **unlock**. The Remote Desktop app's input tag does not grant access to the covered desktop. This is a visual privacy cover, not a password lock: secure desktops such as Ctrl+Alt+Del and UAC, other topmost windows, separate Windows sessions, and applications using raw input are outside its normal desktop coverage or input hooks.
 

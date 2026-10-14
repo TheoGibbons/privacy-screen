@@ -81,6 +81,8 @@ internal static partial class Program
         Pump();
         using var overlay = new PrivacyOverlayWindow(bounds);
         overlay.ShowCovered(bounds);
+        Check(SendMessage(overlay.Handle, 0x0021, desktop.Handle, new IntPtr(0x02010001)) == new IntPtr(3),
+            "overlay rejects mouse/hover activation");
         Pump();
         Check(GetWindowDisplayAffinity(overlay.Handle, out uint affinity) && affinity == 0,
             "overlay is included in captures");
@@ -207,10 +209,20 @@ internal static partial class Program
             Check(guard.IsAlive, "crash restoration helper is running");
             foreach (uint id in PrivacyCursor.CursorIds)
                 Check(RenderCursor(id).All(pixel => pixel == Color.Magenta.ToArgb()), "privacy cursor is blank: " + id);
+            for (int reload = 0; reload < 3; reload++)
+            {
+                Check(PrivacyCursor.Restore(), "Windows cursor scheme reload succeeds");
+                Check(RenderCursor(32512).SequenceEqual(original[32512]), "scheme reload brings the pointer back");
+                cursor.Refresh();
+                foreach (uint id in PrivacyCursor.CursorIds)
+                    Check(RenderCursor(id).All(pixel => pixel == Color.Magenta.ToArgb()),
+                        "privacy repairs a reloaded cursor: " + id);
+            }
         }
         foreach (uint id in PrivacyCursor.CursorIds)
             Check(RenderCursor(id).SequenceEqual(original[id]), "original cursor is restored: " + id);
         Console.WriteLine("PASS: standard Windows cursors are blank during privacy and restored afterward");
+        Console.WriteLine("PASS: cursor scheme reloads are repaired without toggling privacy");
 
         var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!)
         {
@@ -328,6 +340,8 @@ internal static partial class Program
     private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     private delegate IntPtr HookProc(int code, IntPtr message, IntPtr data);
